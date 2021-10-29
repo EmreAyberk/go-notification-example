@@ -3,17 +3,38 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/mailgun/mailgun-go/v4"
-	"github.com/urfave/cli/v2"
-	"log"
-	"os"
 	"time"
 )
+
+type MailContext struct {
+	Sender    string `json:"sender"`
+	Subject   string `json:"subject"`
+	Body      string `json:"body"`
+	Recipient string `json:"recipient"`
+}
 
 var yourDomain string = "sandboxa00df2f07efd4db1bb46391f42301722.mailgun.org"
 
 var privateAPIKey string = "bc247506eff73365cfaea17c71d4fad7-20ebde82-86e2cb60"
 
+func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (string, error) {
+	mailContext := MailContext{
+		Sender:    request.Headers["sender"],
+		Subject:   request.Headers["subject"],
+		Body:      request.Body,
+		Recipient: request.Headers["recipient"],
+	}
+	return sendMail(mailContext)
+}
+
+func main() {
+	lambda.Start(HandleRequest)
+}
+
+/*
 func main() {
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -46,12 +67,12 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
-func sendMail(sender, subject, body, recipient string) (string, error) {
+*/
+func sendMail(mailContext MailContext) (string, error) {
 	mg := mailgun.NewMailgun(yourDomain, privateAPIKey)
 
 	// The message object allows you to add attachments and Bcc recipients
-	message := mg.NewMessage(sender, subject, body, recipient)
+	message := mg.NewMessage(mailContext.Sender, mailContext.Subject, mailContext.Body, mailContext.Recipient)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
