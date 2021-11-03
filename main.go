@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/mailgun/mailgun-go/v4"
+	"log"
 	"time"
 )
 
-type MailContext struct {
+type Mail struct {
 	Sender    string `json:"sender"`
 	Subject   string `json:"subject"`
 	Body      string `json:"body"`
@@ -20,59 +22,32 @@ var yourDomain string = "sandboxa00df2f07efd4db1bb46391f42301722.mailgun.org"
 
 var privateAPIKey string = "bc247506eff73365cfaea17c71d4fad7-20ebde82-86e2cb60"
 
-func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (string, error) {
-	mailContext := MailContext{
-		Sender:    request.Headers["sender"],
-		Subject:   request.Headers["subject"],
-		Body:      request.Body,
-		Recipient: request.Headers["recipient"],
+func handler(ctx context.Context, snsEvent events.SNSEvent) {
+	for _, record := range snsEvent.Records {
+		snsRecord := record.SNS
+
+		mail := Mail{}
+		err := json.Unmarshal([]byte(snsRecord.Message),&mail)
+		if err != nil {
+			log.Println(err)
+		}
+
+		_,err = sendMail(mail)
+		if err != nil {
+			log.Println(err)
+		}
 	}
-	return sendMail(mailContext)
 }
 
 func main() {
-	lambda.Start(HandleRequest)
+	lambda.Start(handler)
 }
 
-/*
-func main() {
-	app := &cli.App{
-		Commands: []*cli.Command{
-			{
-				Name: "send",
-				Aliases: []string{
-					"s",
-				},
-				Action: func(c *cli.Context) error {
-					fmt.Println("girdimmm")
-					mail, err := sendMail(c.String("sender"), c.String("subject"), c.String("body"), c.String("recipient"))
-					if err != nil {
-						return err
-					}
-					fmt.Println(mail)
-					return nil
-				},
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "sender", Required: true},
-					&cli.StringFlag{Name: "subject", Required: true},
-					&cli.StringFlag{Name: "body", Required: true},
-					&cli.StringFlag{Name: "recipient", Required: true},
-				},
-			},
-		},
-	}
-
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-*/
-func sendMail(mailContext MailContext) (string, error) {
+func sendMail(mail Mail) (string, error) {
 	mg := mailgun.NewMailgun(yourDomain, privateAPIKey)
 
 	// The message object allows you to add attachments and Bcc recipients
-	message := mg.NewMessage(mailContext.Sender, mailContext.Subject, mailContext.Body, mailContext.Recipient)
+	message := mg.NewMessage(mail.Sender, mail.Subject, mail.Body, mail.Recipient)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
